@@ -21,7 +21,7 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 install(
-  DIRECTORY launch worlds config
+  DIRECTORY launch worlds config maps
   DESTINATION share/${PROJECT_NAME}
 )
 install(PROGRAMS scripts/lio_cloud_adapter.py DESTINATION lib/${PROJECT_NAME})
