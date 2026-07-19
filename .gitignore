@@ -1,0 +1,13 @@
+/build/
+/install/
+/log/
+
+/clearpath/platform/
+/clearpath/sensors/
+/clearpath/manipulators/
+/clearpath/robot.srdf
+/clearpath/robot.srdf.xacro
+/clearpath/robot.urdf.xacro
+
+/frames_*.gv
+/frames_*.pdf
