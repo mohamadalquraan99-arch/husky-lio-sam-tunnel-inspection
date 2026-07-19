@@ -8,6 +8,7 @@ Panels:
         - /Status1
         - /Map1
         - /Map1/Status1
+        - /Map1/Topic1
       Splitter Ratio: 0.5
     Tree Height: 696
   - Class: rviz_common/Selection
@@ -56,8 +57,8 @@ Visualization Manager:
       Enabled: true
       Name: Map
       Topic:
-        Depth: 5
-        Durability Policy: Volatile
+        Depth: 1
+        Durability Policy: Transient Local
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -115,7 +116,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -3.19000506401062
+      Angle: -3.1600043773651123
       Class: rviz_default_plugins/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -147,5 +148,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1908
-  X: 0
-  Y: 0
+  X: -32
+  Y: -32
