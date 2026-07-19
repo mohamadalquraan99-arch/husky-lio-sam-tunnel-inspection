@@ -21,7 +21,10 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 install(
-  DIRECTORY launch worlds
+  DIRECTORY launch worlds config
   DESTINATION share/${PROJECT_NAME}
 )
+install(PROGRAMS scripts/lio_cloud_adapter.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/wheel_odom_relay.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/wheel_odom_relay.py DESTINATION lib/${PROJECT_NAME})
 ament_package()
