@@ -13,3 +13,4 @@
 /frames_*.pdf
 /maps/
 __pycache__/
+*:Zone.Identifier
