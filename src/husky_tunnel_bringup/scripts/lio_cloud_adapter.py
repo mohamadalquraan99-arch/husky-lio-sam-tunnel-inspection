@@ -27,6 +27,8 @@ class LioCloudAdapter(Node):
         )
 
         self.reported_layout = False
+        self.last_stamp_ns = None
+        self.scan_period = 0.1
         self.get_logger().info("LIO-SAM cloud adapter started")
 
     def cloud_callback(self, msg):
@@ -53,9 +55,44 @@ class LioCloudAdapter(Node):
         valid_mask = np.isfinite(xyz).all(axis=1)
         filtered = records[valid_mask].copy()
 
-        # Bytes 28–31 are padding in the original cloud.
-        # Use them for LIO-SAM's per-point time field.
-        filtered[:, 28:32] = 0
+        # Estimate the scan period from consecutive simulation timestamps.
+        stamp_ns = (
+            msg.header.stamp.sec * 1_000_000_000
+            + msg.header.stamp.nanosec
+        )
+
+        if self.last_stamp_ns is not None:
+            measured_period = (
+                stamp_ns - self.last_stamp_ns
+            ) * 1.0e-9
+
+            if 0.02 <= measured_period <= 0.20:
+                self.scan_period = measured_period
+
+        self.last_stamp_ns = stamp_ns
+
+        # The Gazebo cloud is organized as:
+        #   height = laser rings
+        #   width  = horizontal firing columns
+        #
+        # Assign each column a relative firing time across the scan.
+        columns = np.tile(
+            np.arange(msg.width, dtype=np.float32),
+            msg.height,
+        )
+
+        relative_time = (
+            columns / float(msg.width)
+        ) * self.scan_period
+
+        filtered_time = relative_time[valid_mask]
+        time_bytes = np.asarray(
+            filtered_time,
+            dtype=float_type,
+        ).view(np.uint8).reshape(-1, 4)
+
+        # Bytes 28–31 are padding in the Gazebo cloud.
+        filtered[:, 28:32] = time_bytes
 
         output = PointCloud2()
         output.header = msg.header
@@ -83,7 +120,10 @@ class LioCloudAdapter(Node):
             self.get_logger().info(
                 f"Input points: {records.shape[0]}, "
                 f"valid points: {filtered.shape[0]}, "
-                f"removed: {removed}"
+                f"removed: {removed}, "
+                f"scan period: {self.scan_period:.6f} s, "
+                f"point time: {filtered_time.min():.6f} to "
+                f"{filtered_time.max():.6f} s"
             )
             self.reported_layout = True
 

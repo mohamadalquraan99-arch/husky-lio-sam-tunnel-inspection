@@ -14,3 +14,5 @@
 /maps/
 __pycache__/
 *:Zone.Identifier
+/clearpath/*.before_lio_rates
+/src/husky_tunnel_bringup/patches/lio_sam_failed_debug_experiment.patch

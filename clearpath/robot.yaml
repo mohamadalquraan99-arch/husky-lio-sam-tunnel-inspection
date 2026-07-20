@@ -28,6 +28,7 @@ sensors:
       parent: base_link
       xyz: [0.19, 0.0, 0.20]
       rpy: [0.0, 0.0, 0.0]
+      update_rate: 500
       ros_parameters:
         microstrain_inertial_driver:
           imu_frame_id: imu_0_link
@@ -39,6 +40,8 @@ sensors:
       parent: base_link
       xyz: [0.0, 0.0, 0.50]
       rpy: [0.0, 0.0, 0.0]
+      update_rate: 10
+      update_rate: 500
       ros_parameters:
         velodyne_driver_node:
           frame_id: lidar3d_0_laser
