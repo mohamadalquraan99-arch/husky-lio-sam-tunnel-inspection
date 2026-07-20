@@ -1,203 +1,178 @@
 # Husky LIO-SAM Tunnel Inspection
 
-ROS 2 simulation project for autonomous tunnel mapping and inspection with a
-Clearpath Husky A200, 3D LiDAR, IMU, LIO-SAM, AMCL, and Navigation2.
+ROS 2 simulation project for 3D mapping and autonomous inspection of tunnel
+networks using a Clearpath Husky A200, Velodyne-style 3D LiDAR, IMU, LIO-SAM,
+AMCL, and Navigation2.
 
-This repository preserves a **verified working baseline** before the next
-development phase. The current system can generate and save a 3D tunnel map,
-convert it into a 2D occupancy map, localize with AMCL, navigate through an
-L-shaped tunnel, and execute a waypoint-based inspection mission.
+## Current status
 
-> [!IMPORTANT]
-> The current mapping pipeline uses LIO-SAM's LiDAR processing, feature
-> extraction, and map optimization, but full IMU preintegration is disabled.
-> Clearpath wheel odometry supplies the incremental motion estimate because the
-> simulated IMU/preintegration pipeline was unstable. Improving genuine
-> LiDAR-IMU fusion is the main goal of the next project phase.
+The current development branch runs genuine LIO-SAM with LiDAR processing,
+feature extraction, map optimization, IMU deskewing, and IMU preintegration.
+The robot can be driven through the Gazebo tunnel network while LIO-SAM builds
+a registered 3D map in RViz.
 
-## Current capabilities
+The main stability issue was an unnecessary IMU orientation transformation.
+Gazebo already publishes an ENU, robot-aligned orientation, but LIO-SAM applied
+`extQRPY` again and introduced a false initial roll of approximately 0.49 rad.
+The saved simulation patch passes through the already-aligned orientation while
+retaining accelerometer, gyroscope, orientation, deskewing, and preintegration.
 
-- Clearpath Husky A200 simulation in an L-shaped tunnel
-- Simulated 3D LiDAR and IMU
-- LiDAR point-cloud adapter for LIO-SAM compatibility
-- LIO-SAM feature extraction and 3D map optimization
-- Wheel-odometry assistance in geometrically repetitive tunnel sections
-- Saving LIO-SAM maps as PCD files
-- Converting a saved 3D PCD map to a Navigation2 occupancy map
-- AMCL localization on the saved 2D map
-- Navigation2 planning and control through the tunnel corner
-- Automatic initial localization in simulation
-- Autonomous waypoint inspection mission with configurable pauses
-
-## Verified results
-
-- Stable Husky simulation and teleoperation
-- Stable three-node LIO-SAM mapping pipeline
-- Saved `GlobalMap.pcd` with approximately 96,000 points
-- Valid `354 x 248` Nav2 occupancy map at `0.10 m/cell`
-- AMCL localization with a connected `map -> odom -> base_link` TF tree
-- Successful Navigation2 goal around the L-shaped corner
-- Successful autonomous inspection mission ending near `(29, 15)`
-
-## System architecture
-
-### Mapping mode
+The LIO-SAM launch also remaps the standard TF topics to Clearpath's namespaced
+TF tree:
 
 ```text
-Clearpath 3D LiDAR
-        |
-        v
-lio_cloud_adapter.py
-  - removes invalid points
-  - adds the required time field
-        |
-        v
-LIO-SAM imageProjection
-        |
-        v
-LIO-SAM featureExtraction
-        |
-        v
-LIO-SAM mapOptimization --------> 3D PCD map
-        ^
-        |
-wheel_odom_relay.py
+/a200_0000/tf
+/a200_0000/tf_static
 ```
 
-The simulated LiDAR provides `ring` but no per-point `time` field. The adapter
-currently assigns `time = 0.0` to every point. The tunnel is also degenerate
-along its long straight axis, so wheel odometry is used as the incremental
-motion estimate.
+## Capabilities
 
-### Navigation mode
+- Clearpath Husky A200 simulation in a multi-branch tunnel network
+- Simulated 3D LiDAR and robot-aligned IMU
+- LIO-SAM-compatible cloud adapter with `ring` and `time` fields
+- Genuine LIO-SAM IMU deskewing and preintegration
+- LIO-SAM feature extraction, scan-to-map optimization, and 3D mapping
+- Live registered-cloud and global-map visualization in RViz
+- Saving generated maps as PCD files
+- Conversion of PCD maps into Navigation2 occupancy maps
+- AMCL localization and Navigation2 planning on a saved map
+- Waypoint-based inspection mission from the verified navigation baseline
+- One-command Gazebo and LIO-SAM startup
+
+## Architecture
 
 ```text
-Saved 3D PCD map
+Gazebo tunnel network
         |
-        v
-pcd_to_nav2_map.py
-        |
-        v
-2D occupancy map + LaserScan + wheel odometry
-        |
-        v
-AMCL + Navigation2
-        |
-        v
-Husky autonomous inspection mission
+        +-- Husky IMU ----------------------+
+        |                                    |
+        +-- 3D LiDAR -> cloud adapter -------+--> LIO-SAM
+                                                   |
+                                                   +--> IMU preintegration
+                                                   +--> feature extraction
+                                                   +--> map optimization
+                                                   +--> registered 3D cloud
+                                                   `--> PCD map
 ```
 
-Mapping mode and saved-map navigation mode are intentionally separate in the
-current baseline.
+Wheel odometry remains available for the Navigation2 baseline, but it is not a
+replacement for IMU preintegration in the current LIO-SAM pipeline.
 
 ## Tested environment
 
 - Ubuntu 22.04 under WSL2
 - ROS 2 Humble
-- Ignition Gazebo Fortress 6.18
+- Gazebo Fortress / Ignition Gazebo 6
 - Clearpath ROS 2 simulator
-- Navigation2
+- LIO-SAM ROS 2 branch
 - GTSAM 4.1.1
-- PCL / `pcl_ros`
+- PCL and `pcl_ros`
+- Navigation2
 
-Actual wall-clock sensor rates may be lower than configured rates when Gazebo's
-real-time factor drops under WSL.
+Gazebo's wall-clock sensor rates may be lower than the configured simulation
+rates when the real-time factor drops, especially under WSL2.
 
 ## Repository structure
 
 ```text
 husky_ws/
-|-- .gitmodules
+|-- clearpath/                         # Generated Clearpath robot configuration
 |-- src/
 |   |-- husky_tunnel_bringup/
-|   |   |-- config/
-|   |   |   |-- lio_sam.yaml
-|   |   |   |-- nav2_params.yaml
-|   |   |   |-- tunnel_mapping.rviz
-|   |   |   `-- tunnel_nav2.rviz
-|   |   |-- launch/
-|   |   |   |-- tunnel_sim.launch.py
-|   |   |   |-- tunnel_mapping.launch.py
-|   |   |   |-- tunnel_localization.launch.py
-|   |   |   |-- tunnel_navigation.launch.py
-|   |   |   `-- tunnel_nav2.launch.py
-|   |   |-- maps/
-|   |   |   |-- tunnel_nav2.pgm
-|   |   |   `-- tunnel_nav2.yaml
-|   |   |-- patches/
-|   |   |   `-- lio_sam_planar_husky.patch
-|   |   |-- scripts/
-|   |   |   |-- lio_cloud_adapter.py
-|   |   |   |-- wheel_odom_relay.py
-|   |   |   |-- pcd_to_nav2_map.py
-|   |   |   `-- inspection_mission.py
-|   |   `-- worlds/
-|   |       `-- tunnel.sdf
-|   `-- lio_sam/                 # Git submodule
-`-- maps/                         # Generated maps; ignored by Git
+|   |   |-- config/                    # LIO-SAM and Nav2 parameters, RViz configs
+|   |   |-- launch/                    # Simulation, mapping, and navigation launch files
+|   |   |-- maps/                      # Packaged 2D navigation map
+|   |   |-- patches/                   # LIO-SAM and Clearpath simulator fixes
+|   |   |-- scripts/                   # Cloud adapter, map conversion, mission tools
+|   |   `-- worlds/tunnel.sdf          # Tunnel-network world
+|   `-- lio_sam/                       # Upstream Git submodule
+`-- README.md
 ```
 
-`build/`, `install/`, `log/`, and generated maps are not intended to be
+Generated `build/`, `install/`, `log/`, and runtime map directories are not
 committed.
 
-## Clone and build
+## Clone
 
-Clone the repository with its LIO-SAM submodule:
+Clone the repository and initialize LIO-SAM:
 
 ```bash
-git clone --recurse-submodules <repository-url> husky_ws
+git clone --recurse-submodules \
+  https://github.com/mohamadalquraan99-arch/husky-lio-sam-tunnel-inspection.git \
+  husky_ws
+
 cd husky_ws
 ```
 
-If the submodule was not cloned initially:
+If it was cloned without submodules:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-Apply the saved planar simulation patch from the workspace root:
+## Apply the simulation compatibility changes
+
+Apply the repository's LIO-SAM IMU-alignment patch:
 
 ```bash
 git -C src/lio_sam apply \
-  ../husky_tunnel_bringup/patches/lio_sam_planar_husky.patch
+  ../husky_tunnel_bringup/patches/lio_sam_gazebo_imu_alignment.patch
 ```
 
-Install the required ROS 2 Humble dependencies, GTSAM, the Clearpath simulator,
-Navigation2, and PCL packages before building. Then run:
+The modified Clearpath sensor-description files are preserved under:
+
+```text
+src/husky_tunnel_bringup/patches/clearpath_sensor_overrides/
+```
+
+On a matching ROS 2 Humble installation, install those overrides before
+regenerating the Clearpath robot description:
+
+```bash
+sudo cp \
+  src/husky_tunnel_bringup/patches/clearpath_sensor_overrides/*.xacro \
+  /opt/ros/humble/share/clearpath_sensors_description/urdf/
+```
+
+The simulation is configured for a high-rate IMU and a 10 Hz LiDAR scan rate,
+following LIO-SAM's requirement that IMU measurements arrive substantially
+faster than complete LiDAR scans.
+
+## Build
+
+Install the ROS 2, Clearpath, LIO-SAM, GTSAM, PCL, and Navigation2 dependencies,
+then build:
 
 ```bash
 source /opt/ros/humble/setup.bash
+
+cd ~/husky_ws
 colcon build --symlink-install
+
 source install/setup.bash
 ```
 
-The current simulator setup expects the generated Clearpath robot configuration
-under `~/husky_ws/clearpath`. Packaging a fully portable robot configuration is
-part of the roadmap.
+## Launch Gazebo and LIO-SAM
 
-## Generate a 3D map
-
-### Terminal 1 - simulation
+The combined launch starts the tunnel simulation, waits for Gazebo and the
+sensors to initialize, then starts LIO-SAM and RViz:
 
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/husky_ws/install/setup.bash
-ros2 launch husky_tunnel_bringup tunnel_sim.launch.py
+
+ros2 launch husky_tunnel_bringup tunnel_lio_sam.launch.py
 ```
 
-### Terminal 2 - LIO-SAM mapping
+Gazebo's Teleop plugin should publish velocity commands to:
 
-```bash
-source /opt/ros/humble/setup.bash
-source ~/husky_ws/install/setup.bash
-ros2 launch husky_tunnel_bringup tunnel_mapping.launch.py
+```text
+/a200_0000/cmd_vel
 ```
 
-### Terminal 3 - teleoperation
+Alternatively, drive using the keyboard:
 
 ```bash
-source /opt/ros/humble/setup.bash
-source ~/husky_ws/install/setup.bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard \
   --ros-args \
   -p speed:=0.15 \
@@ -205,71 +180,40 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard \
   -r cmd_vel:=/a200_0000/cmd_vel
 ```
 
-### Save the map
+## Verify LIO-SAM
 
-Use a new destination name so an earlier verified map is not overwritten:
+Check that the IMU and initial attitude are available:
 
 ```bash
-ros2 service call /lio_sam/save_map \
-  lio_sam/srv/SaveMap \
-  "{resolution: 0.1, destination: '/husky_ws/maps/tunnel_map_02'}"
+timeout 10s ros2 topic echo \
+  /lio_sam/deskew/cloud_info \
+  --once | \
+grep -E \
+  'imu_available|odom_available|imu_roll_init|imu_pitch_init|imu_yaw_init'
 ```
 
-The main saved cloud is:
+For a stationary, level robot, roll and pitch should be close to zero and the
+mapping odometry should remain near the origin.
+
+## Save a 3D map
+
+While LIO-SAM is running:
+
+```bash
+ros2 service call \
+  /lio_sam/save_map \
+  lio_sam/srv/SaveMap \
+  "{resolution: 0.0, destination: '/lio_sam_maps/tunnel_run_01'}"
+```
+
+The files are written under:
 
 ```text
-~/husky_ws/maps/tunnel_map_02/GlobalMap.pcd
+~/lio_sam_maps/tunnel_run_01/
 ```
 
-## View a saved 3D map
-
-Publish the PCD as a ROS 2 point cloud:
-
-```bash
-ros2 run pcl_ros pcd_to_pointcloud \
-  --ros-args \
-  -p file_name:=/home/momo1/husky_ws/maps/tunnel_map_01/GlobalMap.pcd \
-  -p tf_frame:=map \
-  -p publishing_period_ms:=1000 \
-  -r cloud_pcd:=/tunnel_3d_map
-```
-
-Open RViz, set the fixed frame to `map`, and add a `PointCloud2` display using
-`/tunnel_3d_map`.
-
-## Run saved-map navigation
-
-### Terminal 1 - simulation
-
-```bash
-ros2 launch husky_tunnel_bringup tunnel_sim.launch.py
-```
-
-### Terminal 2 - localization, Navigation2, and RViz
-
-```bash
-ros2 launch husky_tunnel_bringup tunnel_nav2.launch.py
-```
-
-The simulation baseline initializes AMCL automatically at `(0, 0, 0)`.
-
-## Run the inspection mission
-
-After simulation and `tunnel_nav2.launch.py` are active:
-
-```bash
-ros2 run husky_tunnel_bringup inspection_mission.py \
-  --ros-args \
-  -p use_sim_time:=true \
-  -p start_waypoint:=1 \
-  -p waypoint_limit:=0 \
-  -p inspection_pause:=3.0
-```
-
-The mission travels through the straight tunnel, turns the corner, visits the
-remaining inspection points, and stops at the final waypoint. It is currently a
-one-way navigation-and-pause mission; automatic return and sensor capture are
-future work.
+Use a unique destination for each run because LIO-SAM replaces an existing
+destination directory.
 
 ## Important topics
 
@@ -278,87 +222,51 @@ future work.
 | Husky velocity command | `/a200_0000/cmd_vel` |
 | Wheel odometry | `/a200_0000/platform/odom` |
 | IMU | `/a200_0000/sensors/imu_0/data` |
-| Raw 3D point cloud | `/a200_0000/sensors/lidar3d_0/points` |
-| 2D LaserScan | `/a200_0000/sensors/lidar3d_0/scan` |
+| Raw 3D cloud | `/a200_0000/sensors/lidar3d_0/points` |
 | Adapted LIO-SAM cloud | `/lio_sam/points` |
-| LIO-SAM mapping odometry | `/lio_sam/mapping/odometry` |
+| Deskew information | `/lio_sam/deskew/cloud_info` |
+| IMU odometry | `/lio_sam/odometry/imu` |
+| Mapping odometry | `/lio_sam/mapping/odometry` |
 | Registered cloud | `/lio_sam/mapping/cloud_registered` |
 | Global map visualization | `/lio_sam/mapping/map_global` |
 
-Clearpath publishes robot transforms on namespaced topics:
+## Navigation baseline
 
-```text
-/a200_0000/tf
-/a200_0000/tf_static
-```
+The repository also contains the previously verified AMCL, Navigation2, and
+inspection-mission pipeline. The packaged occupancy map was generated from the
+older tunnel layout. Generate a new occupancy map before using Navigation2 in
+the current tunnel-network world.
 
 ## Known limitations
 
-1. Full LIO-SAM IMU preintegration is disabled.
-2. The simulator produced a false initial roll and unstable inertial velocity.
-3. The current planar patch forces LIO-SAM roll and pitch initialization to zero.
-4. The LiDAR adapter inserts zero-valued point timestamps, limiting deskewing.
-5. Wheel odometry supplies the incremental motion estimate used by LIO-SAM.
-6. The current solution assumes a flat tunnel.
-7. Mapping and saved-map Navigation2 are separate operating modes.
-8. The inspection mission pauses at waypoints but does not yet capture or
-   analyze inspection data.
-9. Clean-machine Clearpath robot-configuration generation is not yet fully
-   packaged in this repository.
+1. The project currently targets the simulated, level Husky sensor mounting.
+2. The IMU pass-through patch assumes Gazebo publishes an ENU, robot-aligned
+   orientation; physical hardware requires measured extrinsic calibration.
+3. The cloud adapter is simulator-specific, and per-point timing accuracy must
+   be validated before high-speed motion.
+4. Long, repetitive tunnel sections remain geometrically difficult for LiDAR
+   scan matching.
+5. Clearpath sensor-rate overrides currently modify installed ROS description
+   files and should eventually become workspace-owned configuration.
+6. The packaged Navigation2 map does not yet represent the new tunnel network.
+7. No project-level license has been selected yet; upstream dependencies retain
+   their own licenses.
 
-## Development roadmap
+## Roadmap
 
-### Phase 1 - preserve the working baseline
+- Generate and validate a complete 3D map of the tunnel network
+- Validate per-point LiDAR timing and motion deskewing
+- Move Clearpath sensor overrides into a portable workspace package
+- Generate a new 2D occupancy map for the tunnel network
+- Revalidate AMCL and Navigation2 on the new map
+- Add repeatable autonomous inspection routes and sensor capture
+- Validate the pipeline on physical Husky, LiDAR, and IMU hardware
 
-- Publish this verified version to GitHub
-- Tag the working wheel-odometry-assisted baseline
-- Keep the existing mapping and navigation workflows reproducible
-
-### Phase 2 - genuine LiDAR-IMU LIO-SAM
-
-- Verify IMU axes, gravity sign, orientation convention, and timestamps
-- Verify LiDAR-to-IMU extrinsic calibration
-- Generate meaningful per-point LiDAR timestamps
-- Remove the forced planar roll/pitch patch
-- Re-enable `lio_sam_imuPreintegration`
-- Remove the wheel-odometry relay from LIO-SAM's incremental IMU odometry topic
-- Compare LIO-SAM, wheel odometry, and Gazebo ground truth
-
-### Phase 3 - improved simulation environment
-
-- Redesign the tunnel world with stronger 3D geometric features
-- Add inspection targets and realistic surface defects
-- Improve simulator performance under WSL
-- Rebuild and validate the 3D and 2D maps
-
-### Phase 4 - inspection capability
-
-- Add camera or higher-detail inspection sensors
-- Capture sensor data automatically at inspection waypoints
-- Detect and report tunnel defects
-- Add automatic return-to-start and repeat patrols
-
-## Baseline Git strategy
-
-After publishing the repository, tag this working state before starting major
-changes:
-
-```bash
-git tag -a baseline-wheel-odom-nav2-v1 \
-  -m "Verified LIO-SAM mapping, Nav2, and inspection baseline"
-git push origin baseline-wheel-odom-nav2-v1
-```
-
-Develop the IMU integration and tunnel redesign on separate branches so this
-working baseline always remains recoverable.
-
-## Acknowledgements
+## Upstream projects
 
 - [LIO-SAM](https://github.com/TixiaoShan/LIO-SAM)
-- [Clearpath Robotics](https://clearpathrobotics.com/)
-- [ROS 2 Navigation2](https://navigation.ros.org/)
+- [Clearpath Robotics](https://github.com/clearpathrobotics)
+- [Navigation2](https://github.com/ros-navigation/navigation2)
 
-## License
-
-No project license has been selected yet. Add an appropriate license before
-accepting external contributions or redistributing third-party components.
+This repository is a research and educational simulation project and is not an
+official Clearpath or LIO-SAM distribution.
