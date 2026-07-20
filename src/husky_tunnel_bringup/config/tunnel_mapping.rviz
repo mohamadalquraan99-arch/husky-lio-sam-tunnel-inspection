@@ -9,6 +9,8 @@ Panels:
         - /PointCloud21
         - /Path1
         - /PointCloud22
+        - /TF1
+        - /MarkerArray1
       Splitter Ratio: 0.5
     Tree Height: 666
   - Class: rviz_common/Selection
@@ -92,7 +94,7 @@ Visualization Manager:
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Lines
+      Line Style: Billboards
       Line Width: 0.029999999329447746
       Name: Path
       Offset:
@@ -115,8 +117,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 2.4190526008605957
-        Min Value: -0.7098760604858398
+        Max Value: 2.475240707397461
+        Min Value: -0.8455086946487427
         Value: true
       Axis: Z
       Channel Name: z
@@ -145,6 +147,137 @@ Visualization Manager:
         Value: /lio_sam/mapping/map_local
       Use Fixed Frame: true
       Use rainbow: true
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+        a200_0000/robot/base_link/imu_0:
+          Value: true
+        a200_0000/robot/base_link/lidar3d_0:
+          Value: true
+        base_footprint:
+          Value: true
+        base_link:
+          Value: true
+        default_mount:
+          Value: true
+        front_bumper_base_link:
+          Value: true
+        front_bumper_link:
+          Value: true
+        front_bumper_mount:
+          Value: true
+        front_left_wheel:
+          Value: true
+        front_right_wheel:
+          Value: true
+        imu_0_base_link:
+          Value: true
+        imu_0_link:
+          Value: true
+        inertial_link:
+          Value: true
+        lidar3d_0_laser:
+          Value: true
+        lidar3d_0_link:
+          Value: true
+        lidar_link:
+          Value: true
+        lio_odom:
+          Value: true
+        map:
+          Value: true
+        odom:
+          Value: true
+        rear_bumper_base_link:
+          Value: true
+        rear_bumper_link:
+          Value: true
+        rear_bumper_mount:
+          Value: true
+        rear_left_wheel:
+          Value: true
+        rear_right_wheel:
+          Value: true
+        top_chassis_link:
+          Value: true
+        top_plate_default_mount:
+          Value: true
+        top_plate_front_mount:
+          Value: true
+        top_plate_link:
+          Value: true
+        top_plate_rear_mount:
+          Value: true
+        top_plate_user_rail_link:
+          Value: true
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        map:
+          lio_odom:
+            base_link:
+              base_footprint:
+                {}
+              default_mount:
+                top_plate_user_rail_link:
+                  top_plate_link:
+                    top_plate_default_mount:
+                      {}
+                    top_plate_front_mount:
+                      {}
+                    top_plate_rear_mount:
+                      {}
+              front_bumper_mount:
+                front_bumper_base_link:
+                  front_bumper_link:
+                    {}
+              front_left_wheel:
+                {}
+              front_right_wheel:
+                {}
+              imu_0_base_link:
+                imu_0_link:
+                  a200_0000/robot/base_link/imu_0:
+                    {}
+              inertial_link:
+                {}
+              lidar3d_0_link:
+                a200_0000/robot/base_link/lidar3d_0:
+                  {}
+                lidar3d_0_laser:
+                  {}
+              rear_bumper_mount:
+                rear_bumper_base_link:
+                  rear_bumper_link:
+                    {}
+              rear_left_wheel:
+                {}
+              rear_right_wheel:
+                {}
+              top_chassis_link:
+                {}
+            lidar_link:
+              {}
+      Update Interval: 0
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        loop_edges: true
+        loop_nodes: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lio_sam/mapping/loop_closure_constraints
       Value: true
   Enabled: true
   Global Options:
@@ -192,25 +325,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 1.395504117012024
+      Distance: 3.9759325981140137
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 17.753562927246094
-        Y: 25.588764190673828
-        Z: 7.135011196136475
+        X: 18.82318878173828
+        Y: -1.0587605237960815
+        Z: 19.60529136657715
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.19539770483970642
+      Pitch: 0.9797966480255127
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.4835855960845947
+      Yaw: 5.657021999359131
     Saved:
       - Class: rviz_default_plugins/Orbit
         Distance: 1.395504117012024
@@ -234,11 +367,11 @@ Visualization Manager:
         Yaw: 1.4835855960845947
 Window Geometry:
   Displays:
-    collapsed: false
+    collapsed: true
   Height: 957
-  Hide Left Dock: false
-  Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000004000000000000015600000323fc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003b00000323000000c700fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000010f00000323fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003b00000323000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000003b40000003efc0100000002fb0000000800540069006d00650100000000000003b40000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000001430000032300000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Hide Left Dock: true
+  Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd00000004000000000000015600000323fc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073000000003b00000323000000c700fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000010f00000323fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003b00000323000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000003b40000003efc0100000002fb0000000800540069006d00650100000000000003b40000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000003b40000032300000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -246,7 +379,7 @@ Window Geometry:
   Tool Properties:
     collapsed: false
   Views:
-    collapsed: false
+    collapsed: true
   Width: 948
-  X: 943
-  Y: 155
+  X: 729
+  Y: 2
