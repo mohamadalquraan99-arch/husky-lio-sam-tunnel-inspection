@@ -116,6 +116,13 @@
         </visual>
 
         <!-- Fill the two missing outer loop-corner floors. -->
+        <collision name="northwest_corner_floor_collision">
+          <pose>13.7 21.3 -0.10 0 0 0</pose>
+          <geometry>
+            <box><size>2.6 2.6 0.2</size></box>
+          </geometry>
+        </collision>
+
         <visual name="northwest_corner_floor_visual">
           <pose>13.7 21.3 -0.10 0 0 0</pose>
           <geometry>
@@ -126,6 +133,13 @@
             <diffuse>0.33 0.33 0.35 1</diffuse>
           </material>
         </visual>
+
+        <collision name="northeast_corner_floor_collision">
+          <pose>41.3 21.3 -0.10 0 0 0</pose>
+          <geometry>
+            <box><size>2.6 2.6 0.2</size></box>
+          </geometry>
+        </collision>
 
         <visual name="northeast_corner_floor_visual">
           <pose>41.3 21.3 -0.10 0 0 0</pose>
