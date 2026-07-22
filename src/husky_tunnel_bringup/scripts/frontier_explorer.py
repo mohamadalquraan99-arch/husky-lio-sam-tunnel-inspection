@@ -296,6 +296,10 @@ class FrontierExplorer:
             for blocked_x, blocked_y in self.blacklist
         )
 
+    def blacklist_goal(self, x, y):
+        self.blacklist.append((x, y))
+        self.blacklist = self.blacklist[-50:]
+
     def select_frontier(self, robot_x, robot_y):
         message = self.latest_map
         grid = np.asarray(message.data, dtype=np.int16).reshape(
@@ -442,7 +446,7 @@ class FrontierExplorer:
                 self.navigator.get_logger().warning(
                     "Frontier goal was rejected; blacklisting it"
                 )
-                self.blacklist.append((goal_x, goal_y))
+                self.blacklist_goal(goal_x, goal_y)
                 continue
 
             started = time.monotonic()
@@ -476,9 +480,7 @@ class FrontierExplorer:
                 self.navigator.get_logger().warning(
                     "Frontier goal failed; selecting a different region"
                 )
-
-            self.blacklist.append((goal_x, goal_y))
-            self.blacklist = self.blacklist[-50:]
+                self.blacklist_goal(goal_x, goal_y)
 
             # Allow the occupancy grid to incorporate the newly visible area
             # before choosing the next frontier.

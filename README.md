@@ -269,7 +269,7 @@ ros2 launch husky_tunnel_bringup tunnel_autonomous_exploration.launch.py
 ```
 
 The explorer clusters free cells bordering unknown space, places each goal back
-from the frontier with an obstacle-clearance check, and blacklists completed or
+from the frontier with an obstacle-clearance check, and blacklists rejected or
 failed goals before selecting another region.
 
 ## Navigation baseline
