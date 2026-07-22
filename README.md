@@ -33,6 +33,9 @@ TF tree:
 - Genuine LIO-SAM IMU deskewing and preintegration
 - LIO-SAM feature extraction, scan-to-map optimization, and 3D mapping
 - Live registered-cloud and global-map visualization in RViz
+- Live 2D occupancy mapping alongside LIO-SAM
+- Navigation2 planning and control on the expanding live map
+- Experimental frontier-based autonomous tunnel exploration
 - Saving generated maps as PCD files
 - Conversion of PCD maps into Navigation2 occupancy maps
 - AMCL localization and Navigation2 planning on a saved map
@@ -230,12 +233,51 @@ destination directory.
 | Registered cloud | `/lio_sam/mapping/cloud_registered` |
 | Global map visualization | `/lio_sam/mapping/map_global` |
 
+## Live mapping and navigation
+
+Start the simulator, LIO-SAM, live 2D mapping, and Navigation2 together:
+
+```bash
+ros2 launch husky_tunnel_bringup tunnel_live_nav2.launch.py
+```
+
+The navigation TF tree uses `/a200_0000/tf`, while LIO-SAM's dynamic TF is
+isolated on `/lio_sam/tf`. The live occupancy grid is built from a horizontal
+slice of the 3D LiDAR and uses wheel odometry in the repetitive tunnel geometry.
+LIO-SAM continues building the independent registered 3D map concurrently.
+
+Before enabling automatic movement, run the frontier selector in dry-run mode
+from a second terminal:
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/husky_ws/install/setup.bash
+
+ros2 run husky_tunnel_bringup frontier_explorer.py --ros-args \
+  -r /tf:=/a200_0000/tf \
+  -r /tf_static:=/a200_0000/tf_static \
+  -p use_sim_time:=true \
+  -p dry_run:=true
+```
+
+The node reports its selected map-frame goal but does not command the robot.
+After checking that the goal is in visible free tunnel space, stop the dry run
+and start the complete autonomous pipeline:
+
+```bash
+ros2 launch husky_tunnel_bringup tunnel_autonomous_exploration.launch.py
+```
+
+The explorer clusters free cells bordering unknown space, places each goal back
+from the frontier with an obstacle-clearance check, and blacklists completed or
+failed goals before selecting another region.
+
 ## Navigation baseline
 
-The repository also contains the previously verified AMCL, Navigation2, and
-inspection-mission pipeline. The packaged occupancy map was generated from the
-older tunnel layout. Generate a new occupancy map before using Navigation2 in
-the current tunnel-network world.
+The repository also retains the AMCL and inspection-mission pipeline for
+navigation on a saved occupancy map. The live exploration pipeline does not use
+AMCL or the packaged map server; SLAM Toolbox publishes `map -> odom` while the
+map grows.
 
 ## Known limitations
 
@@ -248,7 +290,8 @@ the current tunnel-network world.
    scan matching.
 5. Clearpath sensor-rate overrides currently modify installed ROS description
    files and should eventually become workspace-owned configuration.
-6. The packaged Navigation2 map does not yet represent the new tunnel network.
+6. Frontier exploration is experimental and should first be checked in dry-run
+   mode for each world or sensor-configuration change.
 7. No project-level license has been selected yet; upstream dependencies retain
    their own licenses.
 
@@ -257,8 +300,8 @@ the current tunnel-network world.
 - Generate and validate a complete 3D map of the tunnel network
 - Validate per-point LiDAR timing and motion deskewing
 - Move Clearpath sensor overrides into a portable workspace package
-- Generate a new 2D occupancy map for the tunnel network
-- Revalidate AMCL and Navigation2 on the new map
+- Validate autonomous frontier coverage throughout the tunnel network
+- Save and revalidate the resulting 2D map with AMCL
 - Add repeatable autonomous inspection routes and sensor capture
 - Validate the pipeline on physical Husky, LiDAR, and IMU hardware
 
