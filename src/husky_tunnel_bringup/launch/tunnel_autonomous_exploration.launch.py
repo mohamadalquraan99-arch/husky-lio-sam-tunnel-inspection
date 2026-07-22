@@ -35,7 +35,7 @@ def generate_launch_description():
             "goal_clearance": 0.70,
             "goal_search_radius": 1.2,
             "blacklist_radius": 1.2,
-            "goal_timeout": 120.0,
+            "goal_timeout": 35.0,
             "information_gain_weight": 0.15,
             "distance_score_weight": 1.0,
             "maximum_frontier_samples": 40,

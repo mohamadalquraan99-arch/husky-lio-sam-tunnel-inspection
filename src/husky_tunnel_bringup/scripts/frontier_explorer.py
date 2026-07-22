@@ -39,7 +39,7 @@ class FrontierExplorer:
         self.navigator.declare_parameter("goal_clearance", 0.70)
         self.navigator.declare_parameter("goal_search_radius", 1.2)
         self.navigator.declare_parameter("blacklist_radius", 1.2)
-        self.navigator.declare_parameter("goal_timeout", 120.0)
+        self.navigator.declare_parameter("goal_timeout", 35.0)
         self.navigator.declare_parameter("maximum_goals", 0)
         self.navigator.declare_parameter("information_gain_weight", 0.15)
         self.navigator.declare_parameter("distance_score_weight", 1.0)
