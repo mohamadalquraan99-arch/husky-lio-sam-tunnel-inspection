@@ -32,14 +32,15 @@ class FrontierExplorer:
         self.last_no_frontier_report = 0.0
 
         self.navigator.declare_parameter("minimum_frontier_cells", 8)
-        self.navigator.declare_parameter("minimum_goal_distance", 0.8)
+        self.navigator.declare_parameter("minimum_goal_distance", 0.75)
         self.navigator.declare_parameter("maximum_goal_distance", 25.0)
-        self.navigator.declare_parameter("goal_standoff", 0.8)
-        self.navigator.declare_parameter("goal_clearance", 0.60)
+        self.navigator.declare_parameter("goal_standoff", 1.0)
+        self.navigator.declare_parameter("goal_clearance", 0.70)
         self.navigator.declare_parameter("goal_search_radius", 1.2)
         self.navigator.declare_parameter("blacklist_radius", 1.2)
         self.navigator.declare_parameter("goal_timeout", 120.0)
         self.navigator.declare_parameter("information_gain_weight", 0.15)
+        self.navigator.declare_parameter("distance_score_weight", 1.0)
         self.navigator.declare_parameter("free_threshold", 20)
         self.navigator.declare_parameter("dry_run", True)
 
@@ -61,6 +62,9 @@ class FrontierExplorer:
         self.goal_timeout = self._double_parameter("goal_timeout")
         self.information_gain_weight = self._double_parameter(
             "information_gain_weight"
+        )
+        self.distance_score_weight = self._double_parameter(
+            "distance_score_weight"
         )
         self.free_threshold = self._integer_parameter("free_threshold")
         self.dry_run = self._boolean_parameter("dry_run")
@@ -228,7 +232,7 @@ class FrontierExplorer:
         resolution = message.info.resolution
         return local_y / resolution - 0.5, local_x / resolution - 0.5
 
-    def _cell_is_clear(self, grid, row, col, radius, require_known):
+    def _cell_is_clear(self, grid, row, col, radius):
         height, width = grid.shape
         row_min = max(0, row - radius)
         row_max = min(height, row + radius + 1)
@@ -240,7 +244,7 @@ class FrontierExplorer:
             return False
         if np.any(window > self.free_threshold):
             return False
-        if require_known and np.any(window < 0):
+        if np.any(window < 0):
             return False
         return True
 
@@ -276,16 +280,14 @@ class FrontierExplorer:
 
         candidates.sort()
 
-        for require_known in (True, False):
-            for _, row, col in candidates:
-                if self._cell_is_clear(
-                    grid,
-                    row,
-                    col,
-                    clearance_cells,
-                    require_known,
-                ):
-                    return row, col
+        for _, row, col in candidates:
+            if self._cell_is_clear(
+                grid,
+                row,
+                col,
+                clearance_cells,
+            ):
+                return row, col
 
         return None
 
@@ -312,8 +314,16 @@ class FrontierExplorer:
             message,
         )
         best = None
+        rejected = {
+            "clusters": 0,
+            "unsafe": 0,
+            "too_close": 0,
+            "too_far": 0,
+            "blacklisted": 0,
+        }
 
         for cluster in self.frontier_clusters(grid):
+            rejected["clusters"] += 1
             centroid_row = float(cluster[:, 0].mean())
             centroid_col = float(cluster[:, 1].mean())
             vector_row = robot_row - centroid_row
@@ -340,6 +350,7 @@ class FrontierExplorer:
             )
 
             if goal_cell is None:
+                rejected["unsafe"] += 1
                 continue
 
             goal_row, goal_col = goal_cell
@@ -351,10 +362,13 @@ class FrontierExplorer:
             distance = math.hypot(goal_x - robot_x, goal_y - robot_y)
 
             if distance < self.minimum_goal_distance:
+                rejected["too_close"] += 1
                 continue
             if distance > self.maximum_goal_distance:
+                rejected["too_far"] += 1
                 continue
             if self.is_blacklisted(goal_x, goal_y):
+                rejected["blacklisted"] += 1
                 continue
 
             frontier_x, frontier_y = self.grid_to_world(
@@ -364,7 +378,13 @@ class FrontierExplorer:
             )
             yaw = math.atan2(frontier_y - goal_y, frontier_x - goal_x)
             information_gain = len(cluster) * message.info.resolution
-            score = distance - self.information_gain_weight * information_gain
+            # In tunnels, selecting the nearest frontier tends to chase small
+            # unknown pockets beside walls and obstacles. Prefer a distant,
+            # high-information opening while Nav2 still validates the path.
+            score = -(
+                self.distance_score_weight * distance
+                + self.information_gain_weight * information_gain
+            )
 
             if best is None or score < best[0]:
                 best = (
@@ -376,6 +396,9 @@ class FrontierExplorer:
                     distance,
                 )
 
+        self.last_selection_summary = ", ".join(
+            f"{name}={count}" for name, count in rejected.items()
+        )
         return best
 
     def create_goal(self, x, y, yaw):
@@ -418,7 +441,8 @@ class FrontierExplorer:
                 now = time.monotonic()
                 if now - self.last_no_frontier_report >= 5.0:
                     self.navigator.get_logger().info(
-                        "No reachable frontier is currently available"
+                        "No reachable frontier is currently available "
+                        f"({self.last_selection_summary})"
                     )
                     self.last_no_frontier_report = now
                 continue
@@ -498,11 +522,12 @@ def main():
         explorer.explore()
     except KeyboardInterrupt:
         navigator.get_logger().info("Frontier exploration stopped")
-        if navigator.goal_handle is not None:
+        if rclpy.ok() and navigator.goal_handle is not None:
             navigator.cancelTask()
     finally:
         navigator.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
