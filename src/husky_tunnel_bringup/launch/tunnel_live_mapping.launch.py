@@ -63,7 +63,7 @@ def generate_launch_description():
             "transform_tolerance": 0.10,
             # Exclude most ground and ceiling returns while retaining
             # tunnel walls and navigation obstacles.
-            "min_height": -0.15,
+            "min_height": 0.10,
             "max_height": 1.50,
             "angle_min": -math.pi,
             "angle_max": math.pi,

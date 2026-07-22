@@ -34,11 +34,13 @@ class FrontierExplorer:
         self.navigator.declare_parameter("minimum_frontier_cells", 8)
         self.navigator.declare_parameter("minimum_goal_distance", 0.75)
         self.navigator.declare_parameter("maximum_goal_distance", 25.0)
+        self.navigator.declare_parameter("exploration_step_distance", 3.0)
         self.navigator.declare_parameter("goal_standoff", 1.0)
         self.navigator.declare_parameter("goal_clearance", 0.70)
         self.navigator.declare_parameter("goal_search_radius", 1.2)
         self.navigator.declare_parameter("blacklist_radius", 1.2)
         self.navigator.declare_parameter("goal_timeout", 120.0)
+        self.navigator.declare_parameter("maximum_goals", 0)
         self.navigator.declare_parameter("information_gain_weight", 0.15)
         self.navigator.declare_parameter("distance_score_weight", 1.0)
         self.navigator.declare_parameter("maximum_frontier_samples", 40)
@@ -54,6 +56,9 @@ class FrontierExplorer:
         self.maximum_goal_distance = self._double_parameter(
             "maximum_goal_distance"
         )
+        self.exploration_step_distance = self._double_parameter(
+            "exploration_step_distance"
+        )
         self.goal_standoff = self._double_parameter("goal_standoff")
         self.goal_clearance = self._double_parameter("goal_clearance")
         self.goal_search_radius = self._double_parameter(
@@ -61,6 +66,7 @@ class FrontierExplorer:
         )
         self.blacklist_radius = self._double_parameter("blacklist_radius")
         self.goal_timeout = self._double_parameter("goal_timeout")
+        self.maximum_goals = self._integer_parameter("maximum_goals")
         self.information_gain_weight = self._double_parameter(
             "information_gain_weight"
         )
@@ -357,13 +363,22 @@ class FrontierExplorer:
                 standoff_cells = (
                     self.goal_standoff / message.info.resolution
                 )
+                available_travel = max(
+                    0.0,
+                    vector_length - standoff_cells,
+                )
+                travel_cells = min(
+                    available_travel,
+                    self.exploration_step_distance
+                    / message.info.resolution,
+                )
                 desired_row = (
-                    frontier_row
-                    + vector_row / vector_length * standoff_cells
+                    robot_row
+                    - vector_row / vector_length * travel_cells
                 )
                 desired_col = (
-                    frontier_col
-                    + vector_col / vector_length * standoff_cells
+                    robot_col
+                    - vector_col / vector_length * travel_cells
                 )
                 goal_cell = self.safe_goal_cell(
                     grid,
@@ -452,6 +467,7 @@ class FrontierExplorer:
 
     def explore(self):
         self.wait_for_inputs()
+        attempted_goals = 0
         self.navigator.get_logger().info(
             "Autonomous frontier exploration started"
         )
@@ -534,9 +550,20 @@ class FrontierExplorer:
                 )
                 self.blacklist_goal(goal_x, goal_y)
 
+            attempted_goals += 1
+            if (
+                self.maximum_goals > 0
+                and attempted_goals >= self.maximum_goals
+            ):
+                self.navigator.get_logger().info(
+                    f"Finished the configured {attempted_goals} goal(s); "
+                    "stopping exploration"
+                )
+                return
+
             # Allow the occupancy grid to incorporate the newly visible area
             # before choosing the next frontier.
-            update_deadline = time.monotonic() + 2.0
+            update_deadline = time.monotonic() + 4.0
             while rclpy.ok() and time.monotonic() < update_deadline:
                 rclpy.spin_once(self.navigator, timeout_sec=0.1)
 
