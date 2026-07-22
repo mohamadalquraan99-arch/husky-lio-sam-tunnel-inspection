@@ -41,6 +41,7 @@ class FrontierExplorer:
         self.navigator.declare_parameter("goal_timeout", 120.0)
         self.navigator.declare_parameter("information_gain_weight", 0.15)
         self.navigator.declare_parameter("distance_score_weight", 1.0)
+        self.navigator.declare_parameter("maximum_frontier_samples", 40)
         self.navigator.declare_parameter("free_threshold", 20)
         self.navigator.declare_parameter("dry_run", True)
 
@@ -65,6 +66,9 @@ class FrontierExplorer:
         )
         self.distance_score_weight = self._double_parameter(
             "distance_score_weight"
+        )
+        self.maximum_frontier_samples = self._integer_parameter(
+            "maximum_frontier_samples"
         )
         self.free_threshold = self._integer_parameter("free_threshold")
         self.dry_run = self._boolean_parameter("dry_run")
@@ -316,6 +320,7 @@ class FrontierExplorer:
         best = None
         rejected = {
             "clusters": 0,
+            "samples": 0,
             "unsafe": 0,
             "too_close": 0,
             "too_far": 0,
@@ -324,77 +329,100 @@ class FrontierExplorer:
 
         for cluster in self.frontier_clusters(grid):
             rejected["clusters"] += 1
-            centroid_row = float(cluster[:, 0].mean())
-            centroid_col = float(cluster[:, 1].mean())
-            vector_row = robot_row - centroid_row
-            vector_col = robot_col - centroid_col
-            vector_length = math.hypot(vector_row, vector_col)
-
-            if vector_length < 1.0e-6:
-                continue
-
-            standoff_cells = self.goal_standoff / message.info.resolution
-            desired_row = (
-                centroid_row
-                + vector_row / vector_length * standoff_cells
+            distance_squared = (
+                (cluster[:, 0].astype(float) - robot_row) ** 2
+                + (cluster[:, 1].astype(float) - robot_col) ** 2
             )
-            desired_col = (
-                centroid_col
-                + vector_col / vector_length * standoff_cells
-            )
-            goal_cell = self.safe_goal_cell(
-                grid,
-                desired_row,
-                desired_col,
-                message,
+            farthest_first = np.argsort(distance_squared)[::-1]
+            sample_count = min(
+                len(farthest_first),
+                self.maximum_frontier_samples,
             )
 
-            if goal_cell is None:
-                rejected["unsafe"] += 1
-                continue
+            # A frontier surrounding a locally observed area is often one
+            # connected ring. Its centroid lies beside the robot and is not a
+            # useful exploration target. Evaluate the farthest boundary cells
+            # instead and keep the safest, most distant reachable candidate.
+            for sample_index in farthest_first[:sample_count]:
+                rejected["samples"] += 1
+                frontier_row = float(cluster[sample_index, 0])
+                frontier_col = float(cluster[sample_index, 1])
+                vector_row = robot_row - frontier_row
+                vector_col = robot_col - frontier_col
+                vector_length = math.hypot(vector_row, vector_col)
 
-            goal_row, goal_col = goal_cell
-            goal_x, goal_y = self.grid_to_world(
-                goal_row,
-                goal_col,
-                message,
-            )
-            distance = math.hypot(goal_x - robot_x, goal_y - robot_y)
+                if vector_length < 1.0e-6:
+                    continue
 
-            if distance < self.minimum_goal_distance:
-                rejected["too_close"] += 1
-                continue
-            if distance > self.maximum_goal_distance:
-                rejected["too_far"] += 1
-                continue
-            if self.is_blacklisted(goal_x, goal_y):
-                rejected["blacklisted"] += 1
-                continue
-
-            frontier_x, frontier_y = self.grid_to_world(
-                centroid_row,
-                centroid_col,
-                message,
-            )
-            yaw = math.atan2(frontier_y - goal_y, frontier_x - goal_x)
-            information_gain = len(cluster) * message.info.resolution
-            # In tunnels, selecting the nearest frontier tends to chase small
-            # unknown pockets beside walls and obstacles. Prefer a distant,
-            # high-information opening while Nav2 still validates the path.
-            score = -(
-                self.distance_score_weight * distance
-                + self.information_gain_weight * information_gain
-            )
-
-            if best is None or score < best[0]:
-                best = (
-                    score,
-                    goal_x,
-                    goal_y,
-                    yaw,
-                    len(cluster),
-                    distance,
+                standoff_cells = (
+                    self.goal_standoff / message.info.resolution
                 )
+                desired_row = (
+                    frontier_row
+                    + vector_row / vector_length * standoff_cells
+                )
+                desired_col = (
+                    frontier_col
+                    + vector_col / vector_length * standoff_cells
+                )
+                goal_cell = self.safe_goal_cell(
+                    grid,
+                    desired_row,
+                    desired_col,
+                    message,
+                )
+
+                if goal_cell is None:
+                    rejected["unsafe"] += 1
+                    continue
+
+                goal_row, goal_col = goal_cell
+                goal_x, goal_y = self.grid_to_world(
+                    goal_row,
+                    goal_col,
+                    message,
+                )
+                distance = math.hypot(
+                    goal_x - robot_x,
+                    goal_y - robot_y,
+                )
+
+                if distance < self.minimum_goal_distance:
+                    rejected["too_close"] += 1
+                    continue
+                if distance > self.maximum_goal_distance:
+                    rejected["too_far"] += 1
+                    continue
+                if self.is_blacklisted(goal_x, goal_y):
+                    rejected["blacklisted"] += 1
+                    continue
+
+                frontier_x, frontier_y = self.grid_to_world(
+                    frontier_row,
+                    frontier_col,
+                    message,
+                )
+                yaw = math.atan2(
+                    frontier_y - goal_y,
+                    frontier_x - goal_x,
+                )
+                information_gain = (
+                    len(cluster) * message.info.resolution
+                )
+                score = -(
+                    self.distance_score_weight * distance
+                    + self.information_gain_weight * information_gain
+                )
+
+                if best is None or score < best[0]:
+                    best = (
+                        score,
+                        goal_x,
+                        goal_y,
+                        yaw,
+                        len(cluster),
+                        distance,
+                    )
 
         self.last_selection_summary = ", ".join(
             f"{name}={count}" for name, count in rejected.items()

@@ -38,6 +38,7 @@ def generate_launch_description():
             "goal_timeout": 120.0,
             "information_gain_weight": 0.15,
             "distance_score_weight": 1.0,
+            "maximum_frontier_samples": 40,
             "free_threshold": 20,
             "dry_run": False,
         }],
