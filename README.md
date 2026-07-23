@@ -11,6 +11,12 @@ feature extraction, map optimization, IMU deskewing, and IMU preintegration.
 The robot can be driven through the Gazebo tunnel network while LIO-SAM builds
 a registered 3D map in RViz.
 
+The autonomous exploration checkpoint additionally runs SLAM Toolbox scan
+matching, Navigation2, and the C++ `frontier_exploration_ros2` explorer. The
+robot autonomously selects distant, high-information frontiers while the live
+2D occupancy map and independent LIO-SAM 3D map are generated concurrently. A
+combined launch file starts the complete pipeline.
+
 The main stability issue was an unnecessary IMU orientation transformation.
 Gazebo already publishes an ENU, robot-aligned orientation, but LIO-SAM applied
 `extQRPY` again and introduced a false initial roll of approximately 0.49 rad.
@@ -35,12 +41,12 @@ TF tree:
 - Live registered-cloud and global-map visualization in RViz
 - Live 2D occupancy mapping alongside LIO-SAM
 - Navigation2 planning and control on the expanding live map
-- Experimental frontier-based autonomous tunnel exploration
+- C++ frontier-based autonomous tunnel exploration
 - Saving generated maps as PCD files
 - Conversion of PCD maps into Navigation2 occupancy maps
 - AMCL localization and Navigation2 planning on a saved map
 - Waypoint-based inspection mission from the verified navigation baseline
-- One-command Gazebo and LIO-SAM startup
+- One-command Gazebo, LIO-SAM, SLAM Toolbox, Nav2, and C++ exploration startup
 
 ## Architecture
 
@@ -88,7 +94,8 @@ husky_ws/
 |   |   |-- patches/                   # LIO-SAM and Clearpath simulator fixes
 |   |   |-- scripts/                   # Cloud adapter, map conversion, mission tools
 |   |   `-- worlds/tunnel.sdf          # Tunnel-network world
-|   `-- lio_sam/                       # Upstream Git submodule
+|   |-- frontier_exploration_ros2/     # C++ frontier explorer submodule
+|   `-- lio_sam/                       # Upstream LIO-SAM submodule
 `-- README.md
 ```
 
@@ -233,45 +240,67 @@ destination directory.
 | Registered cloud | `/lio_sam/mapping/cloud_registered` |
 | Global map visualization | `/lio_sam/mapping/map_global` |
 
-## Live mapping and navigation
+## Live autonomous mapping and navigation
 
-Start the simulator, LIO-SAM, live 2D mapping, and Navigation2 together:
-
-```bash
-ros2 launch husky_tunnel_bringup tunnel_live_nav2.launch.py
-```
-
-The navigation TF tree uses `/a200_0000/tf`, while LIO-SAM's dynamic TF is
-isolated on `/lio_sam/tf`. The live occupancy grid is built from a horizontal
-slice of the 3D LiDAR and uses wheel odometry in the repetitive tunnel geometry.
-LIO-SAM continues building the independent registered 3D map concurrently.
-
-Before enabling automatic movement, run the frontier selector in dry-run mode
-from a second terminal:
+Start the complete verified autonomy pipeline with one command:
 
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/husky_ws/install/setup.bash
 
-ros2 run husky_tunnel_bringup frontier_explorer.py --ros-args \
-  -r /tf:=/a200_0000/tf \
-  -r /tf_static:=/a200_0000/tf_static \
-  -p use_sim_time:=true \
-  -p dry_run:=true
+ros2 launch husky_tunnel_bringup \
+  tunnel_cpp_autonomous_exploration.launch.py
 ```
 
-The node reports its selected map-frame goal but does not command the robot.
-After checking that the goal is in visible free tunnel space, stop the dry run
-and start the complete autonomous pipeline:
+The launch starts the tunnel simulation, Husky sensors, LIO-SAM, the horizontal
+3D-cloud-to-LaserScan conversion, SLAM Toolbox, Navigation2, and RViz. The C++
+frontier explorer starts after a short initialization delay and loads:
+
+```text
+config/tunnel_frontier_best.yaml
+```
+
+The navigation TF tree uses `/a200_0000/tf`, while LIO-SAM's dynamic TF remains
+isolated on `/lio_sam/tf`. SLAM Toolbox publishes the live `map -> odom`
+transform and uses scan matching to construct the expanding 2D occupancy map.
+LIO-SAM concurrently generates the registered 3D cloud and optimized
+trajectory.
+
+The tuned frontier configuration uses:
+
+| Parameter | Value |
+|---|---:|
+| Minimum frontier candidate distance | 10.0 m |
+| Minimum frontier dispatch distance | 3.0 m |
+| Minimum frontier cluster size | 20 cells |
+| Distance weight | 0.35 |
+| Information-gain weight | 1.50 |
+| Suppression no-progress timeout | 20 s |
+| Suppression lifetime | 180 s |
+
+Goal preemption and post-goal settling are disabled to reduce unnecessary
+stopping. Blocked goals are skipped, and temporarily suppressed frontiers are
+left for a later retry. The robot returns to its recorded start pose only when
+the explorer reports genuine completion, rather than whenever all current
+candidates are temporarily suppressed.
+
+Confirm that the C++ implementation is running with:
 
 ```bash
-ros2 launch husky_tunnel_bringup tunnel_autonomous_exploration.launch.py
+pgrep -af frontier_explorer
+ros2 param get /frontier_explorer mrtsp_solver
+ros2 param get /frontier_explorer frontier_candidate_min_goal_distance_m
 ```
 
-The explorer clusters free cells bordering unknown space, prefers distant
-high-information tunnel openings, and places each goal back from the frontier
-with strict known-space obstacle clearance. Rejected or failed goals are
-blacklisted before another region is selected.
+The process path should reference `frontier_exploration_ros2`, the solver
+should be `greedy`, and the candidate distance should be `10.0`.
+
+For debugging, launch the mapping and navigation stack without automatic
+movement:
+
+```bash
+ros2 launch husky_tunnel_bringup tunnel_live_nav2.launch.py
+```
 
 ## Navigation baseline
 
@@ -291,19 +320,28 @@ map grows.
    scan matching.
 5. Clearpath sensor-rate overrides currently modify installed ROS description
    files and should eventually become workspace-owned configuration.
-6. Frontier exploration is experimental and should first be checked in dry-run
-   mode for each world or sensor-configuration change.
+6. Frontier exploration remains sensitive to occupancy-map quality, frontier
+   suppression, and repetitive tunnel geometry; complete coverage must be
+   verified after each autonomous run.
 7. No project-level license has been selected yet; upstream dependencies retain
    their own licenses.
 
 ## Roadmap
 
-- Generate and validate a complete 3D map of the tunnel network
-- Validate per-point LiDAR timing and motion deskewing
-- Move Clearpath sensor overrides into a portable workspace package
-- Validate autonomous frontier coverage throughout the tunnel network
-- Save and revalidate the resulting 2D map with AMCL
+Completed autonomy milestone:
+
+- Concurrent LIO-SAM 3D mapping and SLAM Toolbox 2D mapping
+- Navigation2 operation on the expanding live map
+- C++ frontier exploration with tuned tunnel parameters
+- One-command autonomous exploration launch
+
+Next milestones:
+
+- Validate complete autonomous coverage of the tunnel network
+- Save and evaluate the resulting 2D occupancy and LIO-SAM 3D maps
+- Relaunch Navigation2 using the verified saved map
 - Add repeatable autonomous inspection routes and sensor capture
+- Detect, localize, and report tunnel defects or obstacles
 - Validate the pipeline on physical Husky, LiDAR, and IMU hardware
 
 ## Upstream projects
@@ -311,6 +349,7 @@ map grows.
 - [LIO-SAM](https://github.com/TixiaoShan/LIO-SAM)
 - [Clearpath Robotics](https://github.com/clearpathrobotics)
 - [Navigation2](https://github.com/ros-navigation/navigation2)
+- [frontier_exploration_ros2](https://github.com/mertgulerx/frontier_exploration_ros2)
 
 This repository is a research and educational simulation project and is not an
 official Clearpath or LIO-SAM distribution.
