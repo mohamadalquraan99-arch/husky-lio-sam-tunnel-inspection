@@ -20,6 +20,20 @@ platform:
 
     - name: top_plate
       type: a200.top_plate
+      model: pacs
+      parent: default_mount
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]
+      enabled: true
+
+    - name: sensor_arch
+      type: a200.sensor_arch
+      model: sensor_arch_300
+      parent: default_mount
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]
+      enabled: true
+
 sensors:
   imu:
     - model: microstrain_imu
@@ -33,12 +47,13 @@ sensors:
         microstrain_inertial_driver:
           imu_frame_id: imu_0_link
           use_enu_frame: true
+
   lidar3d:
     - model: velodyne_lidar
       urdf_enabled: true
       launch_enabled: true
-      parent: base_link
-      xyz: [0.0, 0.0, 0.50]
+      parent: sensor_arch_mount
+      xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
       update_rate: 10
       ros_parameters:
