@@ -75,7 +75,7 @@ frontier_explorer:
     escape_enabled: true
 
     # Return to the recorded start pose once no frontiers remain.
-    return_to_start_on_complete: false
+    return_to_start_on_complete: true
 
     # "dp" optimizes traveling distance by comparing posibilities with limited depth. Increasing efficiency but adds extra CPU overhead.
     # "greedy" traverses the full MRTSP matrix one step at a time. Cost free.
@@ -113,7 +113,7 @@ frontier_explorer:
 
     # Behavior when frontiers exist but all of them are temporarily suppressed: stay or return_to_start.
     # Requires `frontier_suppression_enabled: true`
-    all_frontiers_suppressed_behavior: return_to_start
+    all_frontiers_suppressed_behavior: stay
 
 
     # --------------- Algorithm Configuration - Advanced Users --------------- #
@@ -239,7 +239,7 @@ frontier_explorer:
     frontier_suppression_expansion_size_m: 0.5
 
     # Suppression entry lifetime in seconds before old regions and attempts are removed.
-    frontier_suppression_timeout_s: 3600.0
+    frontier_suppression_timeout_s: 180.0
 
     # Maximum allowed time in seconds without meaningful progress before a frontier goal is canceled.
     frontier_suppression_no_progress_timeout_s: 20.0
