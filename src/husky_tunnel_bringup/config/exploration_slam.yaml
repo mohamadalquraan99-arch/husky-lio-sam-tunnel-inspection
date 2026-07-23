@@ -22,7 +22,7 @@ slam_toolbox:
     debug_logging: false
     throttle_scans: 1
     transform_publish_period: 0.05
-    map_update_interval: 2.0
+    map_update_interval: 1.0
     resolution: 0.10
     restamp_tf: false
     min_laser_range: 0.3
@@ -33,7 +33,7 @@ slam_toolbox:
     stack_size_to_use: 40000000
     enable_interactive_mode: false
 
-    use_scan_matching: false
+    use_scan_matching: true
     use_scan_barycenter: true
     minimum_travel_distance: 0.20
     minimum_travel_heading: 0.20

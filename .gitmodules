@@ -2,3 +2,6 @@
 	path = src/lio_sam
 	url = https://github.com/TixiaoShan/LIO-SAM.git
 	branch = ros2
+[submodule "src/frontier_exploration_ros2"]
+	path = src/frontier_exploration_ros2
+	url = https://github.com/mertgulerx/frontier_exploration_ros2.git
