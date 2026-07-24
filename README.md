@@ -59,6 +59,69 @@ by Navigation2, while LIO-SAM independently produces the detailed 3D map.
 - SLAM Toolbox
 - LIO-SAM with GTSAM and PCL
 
+## Quick setup on a new computer
+
+### Requirements
+
+- Ubuntu 22.04
+- ROS 2 Humble Desktop
+- A computer with enough RAM and preferably a dedicated GPU
+- Git
+
+Clone the complete autonomous-exploration branch:
+
+```bash
+cd ~
+
+git clone \
+  --branch feature/autonomous-exploration \
+  --single-branch \
+  --recurse-submodules \
+  https://github.com/mohamadalquraan99-arch/husky-lio-sam-tunnel-inspection.git \
+  husky_ws
+```
+
+Install the dependencies and build the workspace:
+
+```bash
+cd ~/husky_ws
+
+chmod +x scripts/install_dependencies.sh
+./scripts/install_dependencies.sh
+```
+
+Launch the complete project:
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/husky_ws/install/setup.bash
+
+ros2 launch husky_tunnel_bringup \
+  tunnel_backtracking_exploration.launch.py
+```
+
+The launch command starts:
+
+- Gazebo Fortress
+- Clearpath Husky A200
+- 3D LiDAR and IMU bridges
+- LIO-SAM 3D mapping
+- SLAM Toolbox 2D mapping
+- Navigation2
+- RViz
+- The C++ autonomous tunnel explorer
+
+### Updating an existing clone
+
+```bash
+cd ~/husky_ws
+git pull
+git submodule update --init --recursive
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+```
+
 ## Clone and build
 
 ```bash
