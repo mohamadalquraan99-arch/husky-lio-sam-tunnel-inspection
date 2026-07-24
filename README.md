@@ -41,7 +41,7 @@ TF tree:
 - Live registered-cloud and global-map visualization in RViz
 - Live 2D occupancy mapping alongside LIO-SAM
 - Navigation2 planning and control on the expanding live map
-- C++ frontier-based autonomous tunnel exploration
+- C++ nearest-frontier and coverage-backtracking tunnel exploration
 - Saving generated maps as PCD files
 - Conversion of PCD maps into Navigation2 occupancy maps
 - AMCL localization and Navigation2 planning on a saved map
@@ -242,61 +242,80 @@ destination directory.
 
 ## Live autonomous mapping and navigation
 
-Start the complete verified autonomy pipeline with one command:
+Start the complete verified pipeline with one command:
 
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/husky_ws/install/setup.bash
 
 ros2 launch husky_tunnel_bringup \
-  tunnel_cpp_autonomous_exploration.launch.py
+  tunnel_backtracking_exploration.launch.py
 ```
 
-The launch starts the tunnel simulation, Husky sensors, LIO-SAM, the horizontal
-3D-cloud-to-LaserScan conversion, SLAM Toolbox, Navigation2, and RViz. The C++
-frontier explorer starts after a short initialization delay and loads:
+This starts Gazebo, the Husky simulation, LiDAR and IMU bridges, LIO-SAM,
+SLAM Toolbox, Navigation2, RViz, and the C++ tunnel backtracking explorer.
+
+The active explorer is implemented in:
 
 ```text
-config/tunnel_frontier_best.yaml
+src/husky_tunnel_bringup/src/tunnel_backtracking_explorer.cpp
 ```
 
-The navigation TF tree uses `/a200_0000/tf`, while LIO-SAM's dynamic TF remains
-isolated on `/lio_sam/tf`. SLAM Toolbox publishes the live `map -> odom`
-transform and uses scan matching to construct the expanding 2D occupancy map.
-LIO-SAM concurrently generates the registered 3D cloud and optimized
-trajectory.
+Its configuration is:
 
-The tuned frontier configuration uses:
+```text
+src/husky_tunnel_bringup/config/tunnel_backtracking.yaml
+```
 
-| Parameter | Value |
-|---|---:|
-| Minimum frontier candidate distance | 10.0 m |
-| Minimum frontier dispatch distance | 3.0 m |
-| Minimum frontier cluster size | 20 cells |
-| Distance weight | 0.35 |
-| Information-gain weight | 1.50 |
-| Suppression no-progress timeout | 20 s |
-| Suppression lifetime | 180 s |
+The explorer selects the nearest reachable frontier using path distance. While
+the robot moves, it records physically covered map cells. When normal frontiers
+are exhausted, it searches the complete occupancy map for the nearest reachable
+unvisited region. Exploration is considered complete only when neither a
+reachable frontier nor an uncovered region remains.
 
-Goal preemption and post-goal settling are disabled to reduce unnecessary
-stopping. Blocked goals are skipped, and temporarily suppressed frontiers are
-left for a later retry. The robot returns to its recorded start pose only when
-the explorer reports genuine completion, rather than whenever all current
-candidates are temporarily suppressed.
+The explorer does not continuously preempt active Navigation2 goals. Navigation
+uses a custom behavior tree that avoids unnecessary spin and wait recovery
+actions:
 
-Confirm that the C++ implementation is running with:
+```text
+src/husky_tunnel_bringup/config/tunnel_no_spin_wait.xml
+```
+
+Confirm the correct implementation is running:
 
 ```bash
-pgrep -af frontier_explorer
-ros2 param get /frontier_explorer mrtsp_solver
-ros2 param get /frontier_explorer frontier_candidate_min_goal_distance_m
+ros2 node list | grep tunnel_backtracking_explorer
+
+ros2 param get /tunnel_backtracking_explorer no_progress_timeout_s
+ros2 param get /tunnel_backtracking_explorer min_frontier_cells
+ros2 param get /tunnel_backtracking_explorer goal_standoff_m
+ros2 param get /tunnel_backtracking_explorer maximum_cost
 ```
 
-The process path should reference `frontier_exploration_ros2`, the solver
-should be `greedy`, and the candidate distance should be `10.0`.
+Monitor exploration decisions with:
 
-For debugging, launch the mapping and navigation stack without automatic
-movement:
+```bash
+ros2 topic echo /rosout --field msg | \
+grep --line-buffered -Ei \
+'navigating to nearest|nearest unvisited|frontier reached|failed|complete'
+```
+
+LIO-SAM concurrently creates the registered 3D map while SLAM Toolbox publishes
+the live 2D occupancy map used by Navigation2. The Gazebo IMU orientation
+compatibility adjustment is stored as:
+
+```text
+src/husky_tunnel_bringup/patches/lio_sam_gazebo_imu_orientation.patch
+```
+
+After a fresh clone, apply it once before building:
+
+```bash
+git -C src/lio_sam apply \
+  ../husky_tunnel_bringup/patches/lio_sam_gazebo_imu_orientation.patch
+```
+
+For debugging without automatic movement:
 
 ```bash
 ros2 launch husky_tunnel_bringup tunnel_live_nav2.launch.py
