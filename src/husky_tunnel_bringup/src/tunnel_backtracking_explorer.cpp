@@ -56,6 +56,8 @@ public:
     path_distance_weight_ = declare_parameter("path_distance_weight", 0.35);
     information_gain_weight_ = declare_parameter("information_gain_weight", 1.5);
     completion_confirmations_ = declare_parameter("completion_confirmations", 5);
+    return_to_start_on_complete_ =
+      declare_parameter("return_to_start_on_complete", true);
 
     coverage_enabled_ = declare_parameter("coverage_enabled", true);
     coverage_resolution_m_ = declare_parameter("coverage_resolution_m", 0.5);
@@ -598,6 +600,10 @@ private:
 
   void tick()
   {
+    if (mission_finished_) {
+      return;
+    }
+
     if (navigating_) {
       if (goal_handle_ && last_progress_time_.nanoseconds() > 0) {
         const double stalled_for = (get_clock()->now() - last_progress_time_).seconds();
@@ -645,25 +651,119 @@ private:
 
     const double robot_x = transform.transform.translation.x;
     const double robot_y = transform.transform.translation.y;
+
+    if (!home_pose_recorded_) {
+      home_pose_.position.x = robot_x;
+      home_pose_.position.y = robot_y;
+      home_pose_.position.z = 0.0;
+      home_pose_.orientation = transform.transform.rotation;
+      home_pose_recorded_ = true;
+      RCLCPP_INFO(
+        get_logger(), "Recorded return-home pose in %s: (%.2f, %.2f)",
+        global_frame_.c_str(), robot_x, robot_y);
+    }
+
     record_coverage(robot_x, robot_y);
 
     Candidate candidate = select_candidate(*map, *costmap, robot_x, robot_y);
     if (!candidate.valid) {
       ++no_frontier_cycles_;
-      if (no_frontier_cycles_ == completion_confirmations_) {
-        RCLCPP_INFO(
-          get_logger(),
-          "No reachable unexplored frontier remains after %d checks; exploration is complete",
-          completion_confirmations_);
+      if (no_frontier_cycles_ >= completion_confirmations_) {
+        if (return_to_start_on_complete_) {
+          RCLCPP_INFO(
+            get_logger(),
+            "No reachable frontier or meaningful unvisited region remains after %d checks; "
+            "exploration is complete, returning home",
+            completion_confirmations_);
+          send_home_goal();
+        } else {
+          mission_finished_ = true;
+          RCLCPP_INFO(
+            get_logger(),
+            "No reachable frontier or meaningful unvisited region remains after %d checks; "
+            "exploration is complete",
+            completion_confirmations_);
+        }
       } else {
         RCLCPP_INFO_THROTTLE(
           get_logger(), *get_clock(), 5000,
-          "No reachable frontier currently available; checking the map again");
+          "No reachable frontier or meaningful unvisited region currently available; "
+          "checking the map again");
       }
       return;
     }
     no_frontier_cycles_ = 0;
     send_goal(candidate);
+  }
+
+  void send_home_goal()
+  {
+    if (!home_pose_recorded_) {
+      RCLCPP_ERROR(
+        get_logger(), "Cannot return home because the initial map pose was not recorded");
+      mission_finished_ = true;
+      return;
+    }
+
+    NavigateToPose::Goal goal;
+    goal.pose.header.frame_id = global_frame_;
+    goal.pose.header.stamp = get_clock()->now();
+    goal.pose.pose = home_pose_;
+
+    best_distance_remaining_ = std::numeric_limits<double>::infinity();
+    last_progress_time_ = get_clock()->now();
+    cancel_requested_ = false;
+    returning_home_ = true;
+    navigating_ = true;
+
+    RCLCPP_INFO(
+      get_logger(), "Returning to recorded home pose: (%.2f, %.2f)",
+      home_pose_.position.x, home_pose_.position.y);
+
+    auto options = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
+    options.goal_response_callback =
+      [this](GoalHandle::SharedPtr handle) {
+        if (!handle) {
+          RCLCPP_WARN(get_logger(), "Nav2 rejected the return-home goal; retrying later");
+          returning_home_ = false;
+          navigating_ = false;
+          no_frontier_cycles_ = 0;
+          return;
+        }
+        goal_handle_ = handle;
+      };
+    options.feedback_callback =
+      [this](
+      GoalHandle::SharedPtr,
+      const std::shared_ptr<const NavigateToPose::Feedback> feedback) {
+        const double remaining = feedback->distance_remaining;
+        if (!std::isfinite(best_distance_remaining_) ||
+          remaining <= best_distance_remaining_ - progress_epsilon_m_)
+        {
+          best_distance_remaining_ = remaining;
+          last_progress_time_ = get_clock()->now();
+        }
+      };
+    options.result_callback =
+      [this](const GoalHandle::WrappedResult & result) {
+        const bool succeeded = result.code == rclcpp_action::ResultCode::SUCCEEDED;
+        goal_handle_.reset();
+        navigating_ = false;
+        cancel_requested_ = false;
+        returning_home_ = false;
+
+        if (succeeded) {
+          mission_finished_ = true;
+          RCLCPP_INFO(get_logger(), "Home pose reached; autonomous mission finished");
+        } else {
+          no_frontier_cycles_ = 0;
+          RCLCPP_WARN(
+            get_logger(),
+            "Return-home navigation ended with result code %d; retrying after map checks",
+            static_cast<int>(result.code));
+        }
+      };
+    nav_client_->async_send_goal(goal, options);
   }
 
   void send_goal(const Candidate & candidate)
@@ -770,6 +870,7 @@ private:
   double path_distance_weight_{0.35};
   double information_gain_weight_{1.5};
   int completion_confirmations_{5};
+  bool return_to_start_on_complete_{true};
 
   bool coverage_enabled_{true};
   double coverage_resolution_m_{0.5};
@@ -798,6 +899,10 @@ private:
 
   bool navigating_{false};
   bool cancel_requested_{false};
+  bool returning_home_{false};
+  bool mission_finished_{false};
+  bool home_pose_recorded_{false};
+  geometry_msgs::msg::Pose home_pose_;
   int no_frontier_cycles_{0};
   double active_frontier_x_{0.0};
   double active_frontier_y_{0.0};
