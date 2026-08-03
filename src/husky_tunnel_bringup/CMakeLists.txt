@@ -56,6 +56,4 @@ install(
 install(PROGRAMS scripts/lio_cloud_adapter.py DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS scripts/wheel_odom_relay.py DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS scripts/pcd_to_nav2_map.py DESTINATION lib/${PROJECT_NAME})
-install(PROGRAMS scripts/inspection_mission.py DESTINATION lib/${PROJECT_NAME})
-install(PROGRAMS scripts/frontier_explorer.py DESTINATION lib/${PROJECT_NAME})
 ament_package()
