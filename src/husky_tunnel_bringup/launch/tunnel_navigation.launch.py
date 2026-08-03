@@ -17,7 +17,12 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import LoadComposableNodes
@@ -181,6 +186,18 @@ def generate_launch_description():
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=remappings +
                         [('cmd_vel', 'cmd_vel_nav'), ('cmd_vel_smoothed', '/a200_0000/cmd_vel')]),
+        ]
+    )
+
+    # Starting the lifecycle manager in the same group as all managed nodes can
+    # race service discovery on slower simulation systems. In that state the
+    # manager sees only part of the node list and waits forever before applying
+    # the configure transition. Give every standalone Nav2 server time to
+    # advertise its lifecycle services first.
+    delayed_lifecycle_manager = TimerAction(
+        period=5.0,
+        condition=IfCondition(PythonExpression(['not ', use_composition])),
+        actions=[
             Node(
                 package='nav2_lifecycle_manager',
                 executable='lifecycle_manager',
@@ -190,7 +207,7 @@ def generate_launch_description():
                 parameters=[{'use_sim_time': use_sim_time},
                             {'autostart': autostart},
                             {'node_names': lifecycle_nodes}]),
-        ]
+        ],
     )
 
     load_composable_nodes = LoadComposableNodes(
@@ -267,6 +284,7 @@ def generate_launch_description():
     ld.add_action(declare_log_level_cmd)
     # Add the actions to launch all of the navigation nodes
     ld.add_action(load_nodes)
+    ld.add_action(delayed_lifecycle_manager)
     ld.add_action(load_composable_nodes)
 
     return ld

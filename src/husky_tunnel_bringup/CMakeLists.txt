@@ -7,7 +7,36 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 
+
+
+add_executable(
+  tunnel_backtracking_explorer
+  src/tunnel_backtracking_explorer.cpp
+)
+ament_target_dependencies(
+  tunnel_backtracking_explorer
+  rclcpp
+  rclcpp_action
+  geometry_msgs
+  nav_msgs
+  std_msgs
+  nav2_msgs
+  tf2
+  tf2_ros
+)
+install(
+  TARGETS tunnel_backtracking_explorer
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -28,4 +57,5 @@ install(PROGRAMS scripts/lio_cloud_adapter.py DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS scripts/wheel_odom_relay.py DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS scripts/pcd_to_nav2_map.py DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS scripts/inspection_mission.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/frontier_explorer.py DESTINATION lib/${PROJECT_NAME})
 ament_package()

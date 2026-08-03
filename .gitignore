@@ -16,3 +16,15 @@ __pycache__/
 *:Zone.Identifier
 /clearpath/*.before_lio_rates
 /src/husky_tunnel_bringup/patches/lio_sam_failed_debug_experiment.patch
+/clearpath/*.before_*
+/src/husky_tunnel_bringup/config/*.before_*
+/src/husky_tunnel_bringup/worlds/*_backup.sdf
+/src/husky_tunnel_bringup/worlds/*_before_*.sdf
+/src/husky_tunnel_bringup/worlds/*_edit.sdf
+/src/husky_tunnel_bringup/worlds/*_test.sdf
+
+# Runtime data and local backups
+/inspection_data/
+*.before_*
+*.pre_integration.cpp
+/tunnel_original_backup.sdf
