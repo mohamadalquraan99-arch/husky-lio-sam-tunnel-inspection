@@ -13,9 +13,11 @@
 
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
+#include "nav_msgs/msg/grid_cells.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "tf2/exceptions.h"
 #include "tf2/time.h"
 #include "tf2_ros/buffer.h"
@@ -69,6 +71,18 @@ public:
     coverage_min_region_cells_ =
       declare_parameter("coverage_min_region_cells", 10);
 
+    coverage_visualization_topic_ = declare_parameter(
+      "coverage_visualization_topic", std::string("/exploration/visited_area"));
+    coverage_publish_period_s_ = declare_parameter(
+      "coverage_publish_period_s", 1.0);
+
+    initial_area_exclusion_enabled_ = declare_parameter(
+      "initial_area_exclusion_enabled", false);
+    initial_area_min_x_ = declare_parameter("initial_area_min_x", 0.0);
+    initial_area_max_x_ = declare_parameter("initial_area_max_x", 0.0);
+    initial_area_min_y_ = declare_parameter("initial_area_min_y", 0.0);
+    initial_area_max_y_ = declare_parameter("initial_area_max_y", 0.0);
+
     auto map_qos = rclcpp::QoS(rclcpp::KeepLast(1));
     map_qos.reliable().transient_local();
     map_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
@@ -88,6 +102,17 @@ public:
       });
 
     nav_client_ = rclcpp_action::create_client<NavigateToPose>(this, action_name_);
+
+    auto coverage_qos = rclcpp::QoS(rclcpp::KeepLast(1));
+    coverage_qos.reliable().transient_local();
+    coverage_pub_ = create_publisher<nav_msgs::msg::GridCells>(
+      coverage_visualization_topic_, coverage_qos);
+    mission_status_pub_ = create_publisher<std_msgs::msg::String>(
+      "/exploration/mission_status", coverage_qos);
+    coverage_timer_ = create_wall_timer(
+      std::chrono::duration<double>(std::max(0.1, coverage_publish_period_s_)),
+      std::bind(&TunnelBacktrackingExplorer::publish_coverage, this));
+
     timer_ = create_wall_timer(
       std::chrono::duration<double>(planning_period_s_),
       std::bind(&TunnelBacktrackingExplorer::tick, this));
@@ -96,9 +121,21 @@ public:
       get_logger(),
       "Map-driven tunnel backtracking started: map=%s, costmap=%s, action=%s",
       map_topic_.c_str(), costmap_topic_.c_str(), action_name_.c_str());
+    RCLCPP_INFO(
+      get_logger(), "Visited-area visualization topic: %s",
+      coverage_visualization_topic_.c_str());
+    publish_mission_status("EXPLORING");
   }
 
 private:
+  void publish_mission_status(const std::string & status)
+  {
+    std_msgs::msg::String message;
+    message.data = status;
+    mission_status_pub_->publish(message);
+    RCLCPP_INFO(get_logger(), "Mission status: %s", status.c_str());
+  }
+
   struct Cell
   {
     int x{0};
@@ -258,6 +295,15 @@ private:
 
   bool coverage_visited(double world_x, double world_y) const
   {
+    if (initial_area_exclusion_enabled_ &&
+      world_x >= std::min(initial_area_min_x_, initial_area_max_x_) &&
+      world_x <= std::max(initial_area_min_x_, initial_area_max_x_) &&
+      world_y >= std::min(initial_area_min_y_, initial_area_max_y_) &&
+      world_y <= std::max(initial_area_min_y_, initial_area_max_y_))
+    {
+      return true;
+    }
+
     if (coverage_resolution_m_ <= 0.0) {
       return false;
     }
@@ -311,6 +357,37 @@ private:
           coverage_key(center_x + dx, center_y + dy));
       }
     }
+  }
+
+  void publish_coverage()
+  {
+    if (!coverage_enabled_ || coverage_resolution_m_ <= 0.0 || !coverage_pub_) {
+      return;
+    }
+
+    nav_msgs::msg::GridCells message;
+    message.header.frame_id = global_frame_;
+    message.header.stamp = get_clock()->now();
+    message.cell_width = coverage_resolution_m_;
+    message.cell_height = coverage_resolution_m_;
+    message.cells.reserve(covered_cells_.size());
+
+    for (const std::uint64_t key : covered_cells_) {
+      const auto grid_x = static_cast<std::int32_t>(
+        static_cast<std::uint32_t>(key >> 32));
+      const auto grid_y = static_cast<std::int32_t>(
+        static_cast<std::uint32_t>(key & 0xffffffffULL));
+
+      geometry_msgs::msg::Point point;
+      point.x =
+        (static_cast<double>(grid_x) + 0.5) * coverage_resolution_m_;
+      point.y =
+        (static_cast<double>(grid_y) + 0.5) * coverage_resolution_m_;
+      point.z = 0.05;
+      message.cells.push_back(point);
+    }
+
+    coverage_pub_->publish(message);
   }
 
   Candidate select_candidate(
@@ -678,6 +755,7 @@ private:
           send_home_goal();
         } else {
           mission_finished_ = true;
+          publish_mission_status("MISSION_COMPLETE");
           RCLCPP_INFO(
             get_logger(),
             "No reachable frontier or meaningful unvisited region remains after %d checks; "
@@ -702,6 +780,7 @@ private:
       RCLCPP_ERROR(
         get_logger(), "Cannot return home because the initial map pose was not recorded");
       mission_finished_ = true;
+      publish_mission_status("MISSION_FAILED");
       return;
     }
 
@@ -715,6 +794,7 @@ private:
     cancel_requested_ = false;
     returning_home_ = true;
     navigating_ = true;
+    publish_mission_status("RETURNING_HOME");
 
     RCLCPP_INFO(
       get_logger(), "Returning to recorded home pose: (%.2f, %.2f)",
@@ -754,9 +834,11 @@ private:
 
         if (succeeded) {
           mission_finished_ = true;
+          publish_mission_status("HOME_REACHED");
           RCLCPP_INFO(get_logger(), "Home pose reached; autonomous mission finished");
         } else {
           no_frontier_cycles_ = 0;
+          publish_mission_status("RETURN_HOME_RETRY");
           RCLCPP_WARN(
             get_logger(),
             "Return-home navigation ended with result code %d; retrying after map checks",
@@ -878,6 +960,13 @@ private:
   double coverage_min_goal_distance_m_{2.0};
   double coverage_goal_lookahead_m_{8.0};
   int coverage_min_region_cells_{10};
+  std::string coverage_visualization_topic_{"/exploration/visited_area"};
+  double coverage_publish_period_s_{1.0};
+  bool initial_area_exclusion_enabled_{false};
+  double initial_area_min_x_{0.0};
+  double initial_area_max_x_{0.0};
+  double initial_area_min_y_{0.0};
+  double initial_area_max_y_{0.0};
 
   std::unordered_set<std::uint64_t> covered_cells_;
   bool has_last_coverage_pose_{false};
@@ -891,9 +980,12 @@ private:
 
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_sub_;
+  rclcpp::Publisher<nav_msgs::msg::GridCells>::SharedPtr coverage_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mission_status_pub_;
   rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
   GoalHandle::SharedPtr goal_handle_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr coverage_timer_;
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
 

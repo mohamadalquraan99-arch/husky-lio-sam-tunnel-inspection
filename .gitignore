@@ -22,3 +22,9 @@ __pycache__/
 /src/husky_tunnel_bringup/worlds/*_before_*.sdf
 /src/husky_tunnel_bringup/worlds/*_edit.sdf
 /src/husky_tunnel_bringup/worlds/*_test.sdf
+
+# Runtime data and local backups
+/inspection_data/
+*.before_*
+*.pre_integration.cpp
+/tunnel_original_backup.sdf

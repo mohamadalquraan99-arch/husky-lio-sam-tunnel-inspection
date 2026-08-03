@@ -20,7 +20,7 @@ tunnel_backtracking_explorer:
 
     # Only route through known free cells and low-cost Nav2 cells.
     free_threshold: 20
-    maximum_cost: 40
+    maximum_cost: 20
 
     # Prevent immediate retries at a closed or unreachable tunnel end.
     blacklist_radius_m: 0.8
@@ -29,11 +29,11 @@ tunnel_backtracking_explorer:
 
     # Persistent physical-coverage memory
     coverage_enabled: true
-    coverage_resolution_m: 0.5
-    coverage_radius_m: 2.5
+    coverage_resolution_m: 0.25
+    coverage_radius_m: 4.0
     coverage_min_goal_distance_m: 3.0
     coverage_goal_lookahead_m: 8.0
-    coverage_min_region_cells: 40
+    coverage_min_region_cells: 300
 
     # Prefer large, distant branches while using reachable path distance.
     path_distance_weight: 1.0
@@ -42,3 +42,10 @@ tunnel_backtracking_explorer:
     # Require repeated empty scans before declaring coverage complete.
     completion_confirmations: 20
     return_to_start_on_complete: true
+
+    # Treat the initial open staging area as already visited.
+    initial_area_exclusion_enabled: true
+    initial_area_min_x: -13.5
+    initial_area_max_x: 9.0
+    initial_area_min_y: -10.8
+    initial_area_max_y: 10.8
